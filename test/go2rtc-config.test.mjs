@@ -24,7 +24,7 @@ async function generate(extra = {}) {
 test("camera view stream keeps async video and adds normalized incoming audio", async () => {
   const { yaml, sns } = await generate();
   assert.deepEqual(sns, ["CAM1", "VIDEO_ONLY"]);
-  assert.match(yaml, /- ffmpeg:http:\/\/127\.0\.0\.1:3000\/stream\/CAM1#video=copy#async/);
+  assert.match(yaml, /- ffmpeg:http:\/\/127\.0\.0\.1:3000\/stream\/CAM1#input=eufy_h264#video=copy#async/);
   assert.match(yaml, /- ffmpeg:http:\/\/127\.0\.0\.1:3000\/audio\/CAM1#input=eufy_pcm#audio=opus/);
   assert.match(yaml, /eufy_pcm: ".*-f s16le -ar 16000 -ac 1 -i \{input\}"/);
 });
@@ -59,7 +59,7 @@ test("muted hardware still has a backchannel when the SDK exposes talkback", asy
 
 test("a camera without microphone evidence stays video-only", async () => {
   const { yaml } = await generate();
-  assert.match(yaml, /stream\/VIDEO_ONLY#video=copy#async/);
+  assert.match(yaml, /stream\/VIDEO_ONLY#input=eufy_h264#video=copy#async/);
   assert.ok(!yaml.includes("/audio/VIDEO_ONLY"), "no microphone evidence means no inbound audio source");
 });
 

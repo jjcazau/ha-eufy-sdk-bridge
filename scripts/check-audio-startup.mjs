@@ -61,7 +61,7 @@ try {
   await once(server, "listening");
   const config = join(dir, "go2rtc.yaml");
   await writeGo2rtcConfig({ go2rtcConfig: config, selfHost: "127.0.0.1", port: server.address().port }, [
-    { sn: "TEST", stream: "/stream/TEST", audio: { incoming: true } },
+    { sn: "TEST", stream: "/stream/TEST", audio: { incoming: true, talkback: true } },
   ]);
   const yaml = (await readFile(config, "utf8"))
     .replace(":1984", ":32284")

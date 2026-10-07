@@ -1,5 +1,5 @@
-// The generated go2rtc config defines a view-only stream and, when supported, a separate two-way
-// backchannel. Keeping those separate prevents ordinary viewing from opening the camera speaker.
+// A call must use the same stream ID as Live: Advanced Camera Card also displays its call target.
+// The lazy backchannel opens the speaker only when microphone samples arrive.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -39,6 +39,15 @@ test("speaker-capable camera gets a separate lazy two-way stream", async () => {
   assert.match(yaml, /CAM1_2way:/);
   assert.match(yaml, /talkback-worker\.mjs CAM1#backchannel=1#audio=alaw\/8000/);
   assert.ok(!yaml.includes("VIDEO_ONLY_2way"), "no speaker evidence means no talkback stream");
+});
+
+test("the Live stream supports the audio-only call without changing the displayed stream ID", async () => {
+  const { yaml } = await generate();
+  const live = yaml.split("  CAM1:\n")[1].split("  CAM1_2way:\n")[0];
+  assert.match(live, /http:\/\/127\.0\.0\.1:3000\/stream\/CAM1/);
+  assert.match(live, /exec:node \/app\/src\/talkback-worker\.mjs CAM1#backchannel=1#audio=alaw\/8000/);
+  const videoOnly = yaml.split("  VIDEO_ONLY:\n")[1];
+  assert.ok(!videoOnly.includes("backchannel=1"), "a video-only camera must not advertise talkback");
 });
 
 test("muted hardware still has a backchannel when the SDK exposes talkback", async () => {

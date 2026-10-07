@@ -6,8 +6,8 @@
 
 > **Fork with two-way audio:** this fork extends the upstream `mega-yfue/ha-eufy-sdk-bridge` with
 > incoming camera audio and an on-demand go2rtc WebRTC talkback backchannel. The normal camera stream
-> remains view-only; a separate `<serial>_2way` stream opens Eufy talkback only when microphone audio
-> is actually sent. This is intended for Home Assistant doorbell/camera call UIs such as Advanced
+> includes a lazy backchannel that opens Eufy talkback only when microphone audio is actually sent.
+> This is intended for Home Assistant doorbell/camera call UIs such as Advanced
 > Camera Card while keeping the upstream HACS integration compatible.
 
 Microphone audio uses its own audio-only WebRTC connection while Live keeps the existing video
@@ -27,8 +27,8 @@ HTTP  :3000/audio/<sn>     live camera audio (PCM s16le)     ← go2rtc pulls th
 HTTP  :3000/snapshot/<sn>  a JPEG still
 HTTP  :3000/healthz        which cameras are streaming
 
-go2rtc stream <sn>         normal video + incoming audio
-go2rtc stream <sn>_2way    microphone backchannel → Eufy speaker
+go2rtc stream <sn>         video + incoming audio + lazy microphone backchannel
+go2rtc stream <sn>_2way    legacy audio-only microphone target → Eufy speaker
 ```
 
 Video is deliberately **not** on the WebSocket: the WS hands back a URL, and _connecting to that URL

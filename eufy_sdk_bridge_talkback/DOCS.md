@@ -6,7 +6,7 @@ It preserves the upstream bridge behavior and adds:
 
 - incoming camera audio through go2rtc, with bounded media probing so a fresh Live view can start without first placing a call;
 - native go2rtc video ingestion, preserving the first keyframe while a fresh camera session starts;
-- a separate `<serial>_2way` go2rtc stream for microphone backchannel;
+- a lazy microphone backchannel on the main go2rtc stream (and a legacy `<serial>_2way` audio-only target);
 - viewing and talkback share the camera's SDK/P2P session so starting a call does not replace the live feed;
 - lazy Eufy SDK talkback, opened only when actual microphone audio is sent.
 
@@ -54,7 +54,7 @@ Keep the go2rtc API internal. Home Assistant Web Proxy and Advanced Camera Card 
 `http://<fork-add-on-hostname>:1984` with `proxy.live: true`. HTTPS/Companion-app microphone permission
 is required for browser talkback.
 
-Advanced Camera Card 8.1.0 supports a view camera plus a hidden call dependency:
+Advanced Camera Card 8.1.0 opens a separate audio-only microphone connection to the main camera:
 
 ```yaml
 type: custom:advanced-camera-card
@@ -70,21 +70,12 @@ cameras:
       modes: [webrtc]
     proxy:
       live: true
-    dependencies:
-      cameras: [doorbell_2way]
-  - camera_entity: camera.doorbell
-    id: doorbell_2way
-    live_provider: go2rtc
-    go2rtc:
-      url: http://<fork-add-on-hostname>:1984
-      stream: <serial>_2way
-      modes: [webrtc]
-    proxy:
-      live: true
     capabilities:
-      disable_except: [2-way-audio]
+      force: [2-way-audio]
 menu:
   buttons:
+    call:
+      enabled: true
     microphone:
       enabled: true
       type: toggle
@@ -95,6 +86,10 @@ menu:
 Replace the serial and hostname with the discovered values. Tap Live to wake the doorbell, then Call
 and Microphone to speak. Hang up to release the speaker. Viewing and metadata probes never open
 Eufy talkback. The microphone worker extends its battery budget only while the call remains attached.
+
+Keep the main camera call-capable. Do not configure an audio-only `doorbell_2way` dependency for
+Advanced Camera Card: starting Call also selects that dependency as the displayed video stream,
+which makes the picture disappear. Other clients can still use the legacy `<serial>_2way` target.
 
 Validation covers Node 24 unit tests, real ffmpeg conversion, and an ARM64 container build. Audible
 playback on each doorbell model still requires a physical test; AAC-ELD decoding is not hardware-verified.

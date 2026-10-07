@@ -100,6 +100,24 @@ test("hangup during authentication releases a late SDK handle without starting f
   assert.equal(h.encoder.killed, undefined);
 });
 
+test("speaker warmup discards old microphone audio instead of replaying the startup delay", async () => {
+  let ready;
+  const h = harness((session) => new Promise((resolve) => (ready = () => resolve(session))));
+  const sent = [];
+  h.encoder.stdin.on("data", (chunk) => sent.push(chunk));
+  // Each 160-byte PCMA packet is 20 ms. Ten seconds of warmup must not become ten seconds of lag.
+  for (let i = 0; i < 500; i++) h.input.write(Buffer.alloc(160, i % 256));
+  ready();
+  await h.worker.starting;
+  await tick();
+  assert.equal(Buffer.concat(sent).length, 160, "only the freshest 20 ms may survive speaker warmup");
+  assert.deepEqual(sent[0], Buffer.alloc(160, 499 % 256));
+  h.input.write(Buffer.alloc(160, 99));
+  await tick();
+  assert.deepEqual(sent[1], Buffer.alloc(160, 99));
+  await h.worker.shutdown();
+});
+
 test("SDK stop and ffmpeg pipe errors terminate the worker", async () => {
   for (const failure of ["sdk", "pipe"]) {
     const h = harness();
@@ -111,6 +129,28 @@ test("SDK stop and ffmpeg pipe errors terminate the worker", async () => {
     assert.deepEqual(h.stats, { opens: 1, stops: 1, disconnects: 1 });
     assert.deepEqual(h.exits, [failure === "sdk" ? 0 : 1]);
   }
+});
+
+test("encoder backpressure keeps only fresh microphone audio and never pauses capture", async () => {
+  const h = harness();
+  const sent = [];
+  let blocked = true;
+  h.encoder.stdin.write = (chunk) => {
+    sent.push(chunk);
+    return !blocked;
+  };
+  h.input.write(Buffer.alloc(160, 1));
+  await h.worker.starting;
+  for (let i = 0; i < 500; i++) h.input.write(Buffer.alloc(160, i % 256));
+  assert.equal(h.input.isPaused(), false);
+  assert.equal(sent.length, 1);
+  blocked = false;
+  h.encoder.stdin.emit("drain");
+  assert.equal(sent.length, 2);
+  assert.deepEqual(sent[1], Buffer.alloc(160, 499 % 256));
+  await h.worker.shutdown();
+  h.encoder.stdin.emit("drain");
+  assert.equal(sent.length, 2, "hangup must discard even the newest pending packet");
 });
 
 test("only an attached call extends the battery stream budget", async () => {

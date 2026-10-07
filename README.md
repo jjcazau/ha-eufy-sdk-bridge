@@ -10,6 +10,11 @@
 > is actually sent. This is intended for Home Assistant doorbell/camera call UIs such as Advanced
 > Camera Card while keeping the upstream HACS integration compatible.
 
+Microphone audio uses its own audio-only WebRTC connection while Live keeps the existing video
+connection. During speaker startup the bridge drains old microphone audio, retaining only the
+newest 20 ms. Wait for the speaker to connect before speaking: audio captured during warmup is
+discarded so it cannot become a persistent conversation delay.
+
 The host-facing daemon: one process that logs into eufy **once** and exposes the
 [`eufy-sdk`](https://github.com/mega-yfue/eufy-sdk) to a frontend — Home Assistant, a web UI,
 anything. Ships as a multi-arch Docker image with [go2rtc](https://github.com/AlexxIT/go2rtc)

@@ -6,6 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { streamClientFor, dropStreamClient } from "../streams.mjs";
 import { createLiveStillTap } from "./live-still.mjs";
+import { createPcmAudioRelay } from "./audio-relay.mjs";
 
 function json(res, code, body) {
   const s = JSON.stringify(body);
@@ -61,10 +62,10 @@ export function createHttpHandler(ctx) {
   // Log every /stream request's IMMEDIATE requester (IP + UA). Normally that's go2rtc's own ffmpeg on
   // localhost; anything else means something is pulling the bridge feed directly — itself a finding.
   // Then (throttled) ask go2rtc who the real consumer is.
-  function noteStreamRequest(sn, req) {
+  function noteStreamRequest(sn, req, kind = "stream") {
     const ip = req.socket?.remoteAddress ?? "?";
     const ua = req.headers["user-agent"] ?? "";
-    ctx.eventLog?.(`/stream ${sn} requested by ${ip}${ua ? ` (UA: ${ua})` : ""}`);
+    ctx.eventLog?.(`/${kind} ${sn} requested by ${ip}${ua ? ` (UA: ${ua})` : ""}`);
     if (!STREAM_CONSUMER_LOG_MS) return;
     const now = Date.now();
     if (now - (lastConsumerLog.get(sn) ?? 0) < STREAM_CONSUMER_LOG_MS) return;
@@ -215,6 +216,54 @@ export function createHttpHandler(ctx) {
           );
           return json(res, 404, { error: String(e?.message ?? e), reason: e?.reason });
         }
+      }
+    }
+
+    if (kind === "audio" && sn) {
+      noteStreamRequest(sn, req, "audio");
+      if (cfg.streamIdleMs) lastPullAttempt.set(sn, Date.now());
+      if (cfg.streamIdleMs && idleSuspended.has(sn))
+        return json(res, 503, {
+          error: "stream idle-suspended — no recent detection, waiting for motion or a fresh viewer",
+        });
+      const backoff = ctx.streamBackoffMs?.(sn) ?? 0;
+      if (backoff > 0)
+        return json(res, 503, {
+          error: `stream backing off after a failed open — retry in ${Math.ceil(backoff / 1000)}s (P2P unreachable)`,
+        });
+
+      try {
+        const client = await openStreamClient(sn, cfg);
+        const cam = (await client.getDevice(sn)).camera?.();
+        if (!cam?.live) return json(res, 404, { error: "no live audio on this device" });
+
+        const budget = cfg.streamBatteryBudgetMs;
+        const live = await cam.live(budget ? { batteryBudgetMs: budget } : undefined);
+        ctx.noteStreamOpened?.(sn);
+        rtspLastActive.set(sn, Date.now());
+
+        // Stable bridge-internal format: signed 16-bit LE, 16 kHz mono. The generated go2rtc config
+        // declares this exact raw input and transcodes it to Opus for browser WebRTC.
+        res.writeHead(200, {
+          "content-type": "application/octet-stream",
+          "cache-control": "no-cache",
+          "x-eufy-audio-format": "s16le/16000/mono",
+        });
+
+        const stopRelay = createPcmAudioRelay({
+          live,
+          output: res,
+          log: (message) => ctx.eventLog?.(`/audio ${sn} — ${message}`),
+        });
+        const cleanup = () => stopRelay();
+        req.on("close", cleanup);
+        live.on("error", cleanup);
+        live.on("stop", cleanup);
+        return;
+      } catch (e) {
+        ctx.noteStreamFailure?.(sn);
+        dropClient(sn);
+        return json(res, 502, { error: String(e?.message ?? e) });
       }
     }
 

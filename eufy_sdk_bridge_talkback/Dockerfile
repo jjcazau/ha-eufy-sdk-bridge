@@ -7,7 +7,7 @@ ARG GO2RTC_VERSION=1.9.9
 ARG BUILD_ARCH
 RUN case "${BUILD_ARCH:-amd64}" in \
       amd64) g2="go2rtc_linux_amd64" ;; \
-      arm64) g2="go2rtc_linux_arm64" ;; \
+      aarch64) g2="go2rtc_linux_arm64" ;; \
       *) echo "unsupported BUILD_ARCH: ${BUILD_ARCH}" && exit 1 ;; \
     esac \
  && curl -fsSL -o /usr/local/bin/go2rtc \

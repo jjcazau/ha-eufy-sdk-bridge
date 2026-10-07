@@ -1,8 +1,9 @@
 // Write go2rtc.yaml from the live device list, so cameras appear without hand-edited YAML.
 //
-// The normal <serial> stream carries view-only video plus camera audio. A separate <serial>_2way stream
-// carries only the WebRTC microphone backchannel. Keeping them split means merely watching a doorbell
-// never opens its speaker/talkback path; Advanced Camera Card can engage the dependency only for a call.
+// The normal <serial> stream carries video, camera audio, and a lazy microphone backchannel. The card
+// opens a separate audio-only WebRTC call on this same stream ID, so it never switches away from video.
+// Viewing/probing cannot open the speaker: the worker waits for actual microphone samples on stdin.
+// The legacy <serial>_2way audio-only stream remains available for clients with a separate call target.
 //
 // The file contains real serials, so it is gitignored and generated at startup.
 import { writeFile, mkdir } from "node:fs/promises";
@@ -56,14 +57,14 @@ export async function writeGo2rtcConfig(cfg, devices) {
       lines.push(`    - ffmpeg:http://${cfg.selfHost}:${cfg.port}/audio/${d.sn}#input=eufy_pcm#audio=opus`);
     }
 
-    // Separate audio-only call target. go2rtc writes browser microphone PCMA to this process's stdin.
+    // go2rtc writes browser microphone PCMA to this process's stdin.
     // The worker does not connect to the bridge/open talkback until stdin contains audio, so metadata probes
     // are harmless and ordinary viewing never occupies the camera speaker.
     if (hasTalkback(d)) {
+      const backchannel = `    - exec:node /app/src/talkback-worker.mjs ${d.sn}#backchannel=1#audio=alaw/8000#killsignal=15#killtimeout=5`;
+      lines.push(backchannel);
       lines.push(`  ${d.sn}_2way:`);
-      lines.push(
-        `    - exec:node /app/src/talkback-worker.mjs ${d.sn}#backchannel=1#audio=alaw/8000#killsignal=15#killtimeout=5`,
-      );
+      lines.push(backchannel);
     }
   }
 

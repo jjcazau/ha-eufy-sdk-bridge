@@ -7,6 +7,7 @@ on:
       - ".github/workflows/publish-addon.yml"
       - "eufy_sdk_bridge_talkback/**"
       - "src/**"
+      - "scripts/**"
       - "*.mjs"
       - "package*.json"
   workflow_dispatch:
@@ -49,6 +50,8 @@ jobs:
             --build-arg BUILD_ARCH='${{ matrix.arch }}' \
             --build-arg BRIDGE_REF='${{ github.sha }}' \
             --tag "$APP_IMAGE:$APP_VERSION" eufy_sdk_bridge_talkback
+      - name: Verify proxied WebSocket signaling
+        run: docker run --rm "$APP_IMAGE:$APP_VERSION" node scripts/check-go2rtc-origin.mjs
       - name: Publish app image
         run: |
           echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin

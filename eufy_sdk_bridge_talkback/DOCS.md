@@ -92,3 +92,10 @@ Eufy talkback. The microphone worker extends its battery budget only while the c
 
 Validation covers Node 24 unit tests, real ffmpeg conversion, and an ARM64 container build. Audible
 playback on each doorbell model still requires a physical test; AAC-ELD decoding is not hardware-verified.
+
+## Installation builds
+
+From app version 0.1.2, GitHub Actions publishes prebuilt amd64 and aarch64 app images to GHCR after
+source checks pass. Supervisor downloads the image instead of installing ffmpeg and npm dependencies
+on the Home Assistant host. Each image embeds the exact Git commit being published. The Dockerfile
+remains available for local/source builds.

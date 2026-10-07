@@ -17,7 +17,10 @@ RUN case "${BUILD_ARCH:-amd64}" in \
 WORKDIR /app
 ARG BRIDGE_REPO=https://github.com/jjcazau/ha-eufy-sdk-bridge.git
 ARG BRIDGE_REF=main
-RUN git clone --depth 1 --branch "${BRIDGE_REF}" "${BRIDGE_REPO}" /tmp/bridge \
+RUN git init /tmp/bridge \
+ && git -C /tmp/bridge remote add origin "${BRIDGE_REPO}" \
+ && git -C /tmp/bridge fetch --depth 1 origin "${BRIDGE_REF}" \
+ && git -C /tmp/bridge checkout --detach FETCH_HEAD \
  && cp -a /tmp/bridge/. /app/ \
  && rm -rf /tmp/bridge /app/.git \
  && npm ci --omit=dev --no-audit --no-fund \

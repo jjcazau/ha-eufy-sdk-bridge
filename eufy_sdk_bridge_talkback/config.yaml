@@ -1,5 +1,6 @@
 name: eufy-sdk bridge (Talkback Fork)
-version: "0.1.1"
+version: "0.1.2"
+image: ghcr.io/jjcazau/eufy-sdk-bridge-talkback-{arch}
 slug: eufy_sdk_bridge_talkback
 description: Experimental eufy-sdk bridge fork adding incoming camera audio and on-demand WebRTC microphone talkback.
 url: "https://github.com/jjcazau/ha-eufy-sdk-bridge"

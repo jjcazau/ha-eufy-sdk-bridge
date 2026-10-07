@@ -6,6 +6,7 @@ It preserves the upstream bridge behavior and adds:
 
 - incoming camera audio through go2rtc;
 - a separate `<serial>_2way` go2rtc stream for microphone backchannel;
+- viewing and talkback share the camera's SDK/P2P session so starting a call does not replace the live feed;
 - lazy Eufy SDK talkback, opened only when actual microphone audio is sent.
 
 The add-on intentionally uses different default host ports from upstream so both can be installed at

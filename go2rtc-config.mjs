@@ -54,7 +54,7 @@ export async function writeGo2rtcConfig(cfg, devices) {
     }
 
     // Separate audio-only call target. go2rtc writes browser microphone PCMA to this process's stdin.
-    // The worker does not log in/open talkback until stdin actually contains audio, so metadata probes
+    // The worker does not connect to the bridge/open talkback until stdin contains audio, so metadata probes
     // are harmless and ordinary viewing never occupies the camera speaker.
     if (hasTalkback(d)) {
       lines.push(`  ${d.sn}_2way:`);

@@ -1,5 +1,5 @@
 build_from:
-  amd64: node:24-alpine
-  aarch64: node:24-alpine
+  amd64: docker.io/library/node:24-alpine
+  aarch64: docker.io/library/node:24-alpine
 labels:
   org.opencontainers.image.source: "https://github.com/jjcazau/ha-eufy-sdk-bridge"

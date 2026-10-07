@@ -15,13 +15,11 @@ ingress_port: 3000
 panel_icon: mdi:doorbell-video
 ports:
   3000/tcp: 3001
-  1984/tcp: 1985
   8554/tcp: 8556
   8555/tcp: 8557
   8555/udp: 8557
 ports_description:
   3000/tcp: Fork bridge WS + HTTP control
-  1984/tcp: go2rtc API / WebRTC signaling
   8554/tcp: go2rtc RTSP
   8555/tcp: go2rtc WebRTC TCP
   8555/udp: go2rtc WebRTC UDP

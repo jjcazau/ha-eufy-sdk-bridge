@@ -232,13 +232,19 @@ export function createHttpHandler(ctx) {
           error: `stream backing off after a failed open — retry in ${Math.ceil(backoff / 1000)}s (P2P unreachable)`,
         });
 
+      const abort = new AbortController();
+      res.once("close", () => abort.abort());
       try {
         const client = await openStreamClient(sn, cfg);
         const cam = (await client.getDevice(sn)).camera?.();
         if (!cam?.live) return json(res, 404, { error: "no live audio on this device" });
 
         const budget = cfg.streamBatteryBudgetMs;
-        const live = await cam.live(budget ? { batteryBudgetMs: budget } : undefined);
+        const live = await cam.live({ signal: abort.signal, ...(budget ? { batteryBudgetMs: budget } : {}) });
+        if (res.destroyed) {
+          live.stop();
+          return;
+        }
         ctx.noteStreamOpened?.(sn);
         rtspLastActive.set(sn, Date.now());
 
@@ -256,11 +262,12 @@ export function createHttpHandler(ctx) {
           log: (message) => ctx.eventLog?.(`/audio ${sn} — ${message}`),
         });
         const cleanup = () => stopRelay();
-        req.on("close", cleanup);
+        res.on("close", cleanup);
         live.on("error", cleanup);
         live.on("stop", cleanup);
         return;
       } catch (e) {
+        if (abort.signal.aborted) return;
         ctx.noteStreamFailure?.(sn);
         dropClient(sn);
         return json(res, 502, { error: String(e?.message ?? e) });

@@ -21,6 +21,19 @@ budget_ms="$(jq -r '.stream_battery_budget_ms // empty' "$OPTS")"
 [ "$(jq -r '.debug_p2p // false' "$OPTS")" = "true" ] && export BRIDGE_DEBUG_P2P=1
 [ "$(jq -r '.go2rtc_enable // true' "$OPTS")" = "false" ] && export GO2RTC_ENABLE=0
 
+# Advertise the published WebRTC port, not the container's :8555. Explicit candidates can also
+# include a VPN/public address. Otherwise discover the primary LAN address from Supervisor.
+export GO2RTC_WEBRTC_CANDIDATES="$(jq -r '(.webrtc_candidates // []) | join(",")' "$OPTS")"
+if [ -z "$GO2RTC_WEBRTC_CANDIDATES" ] && [ -n "${SUPERVISOR_TOKEN:-}" ]; then
+  network_info="$(curl -fsS -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" "${SUPERVISOR_API}/network/info")" || network_info='{}'
+  addon_info="$(curl -fsS -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" "${SUPERVISOR_API}/addons/self/info")" || addon_info='{}'
+  media_port="$(printf '%s' "$addon_info" | jq -r '.data.network["8555/udp"] // .data.network["8555/tcp"] // 8557')"
+  lan_ip="$(printf '%s' "$network_info" | jq -r '[.data.interfaces[]? | select(.primary == true) | .ipv4.address[]? | split("/")[0]][0] // empty')"
+  if [ -n "$lan_ip" ]; then
+    export GO2RTC_WEBRTC_CANDIDATES="${lan_ip}:${media_port},stun:${media_port}"
+  fi
+fi
+
 register_discovery() {
   [ -n "${SUPERVISOR_TOKEN:-}" ] || return 0
 

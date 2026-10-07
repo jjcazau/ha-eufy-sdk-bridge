@@ -54,8 +54,10 @@ export function createPcmAudioRelay({ live, output, spawnProcess = spawn, log = 
         "-hide_banner",
         "-loglevel",
         "error",
-        "-fflags",
-        "nobuffer",
+        "-probesize",
+        "32",
+        "-analyzeduration",
+        "0",
         ...input,
         "-i",
         "pipe:0",
@@ -64,9 +66,17 @@ export function createPcmAudioRelay({ live, output, spawnProcess = spawn, log = 
       { stdio: ["pipe", "pipe", "inherit"] },
     );
     decoder.stdout.pipe(output, { end: false });
-    decoder.once("error", (e) => log(`audio decoder error: ${e?.message ?? e}`));
+    const current = decoder;
+    const failed = (e) => {
+      if (closed || decoder !== current) return;
+      log(`audio decoder error: ${e?.message ?? e}`);
+      close();
+    };
+    decoder.once("error", failed);
+    decoder.stdin.on("error", failed);
+    decoder.stdout.on("error", failed);
     decoder.once("exit", (code, signal) => {
-      if (!closed && code && code !== 0) log(`audio decoder exited code=${code} signal=${signal ?? ""}`);
+      if (!closed && decoder === current) failed(new Error(`exited code=${code} signal=${signal ?? ""}`));
     });
   };
 
@@ -93,6 +103,7 @@ export function createPcmAudioRelay({ live, output, spawnProcess = spawn, log = 
     closed = true;
     live.off?.("audio", onAudio);
     stopDecoder();
+    output.end();
     try {
       live.stop?.();
     } catch {

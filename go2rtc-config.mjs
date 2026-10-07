@@ -12,8 +12,8 @@ import { dirname } from "node:path";
 // include camera/video). This matches what HA turns into a camera entity — using deviceClass here
 // would miss a camera the SDK downgrades to "other" for sitting behind a HomeBase (not direct P2P).
 const isCamera = (d) => Boolean(d.stream);
-const hasIncomingAudio = (d) => d.state?.microphone === true;
-const hasTalkback = (d) => d.state?.speaker === true;
+const hasIncomingAudio = (d) => d.audio?.incoming ?? typeof d.state?.microphone === "boolean";
+const hasTalkback = (d) => d.audio?.talkback ?? typeof d.state?.speaker === "boolean";
 
 export async function writeGo2rtcConfig(cfg, devices) {
   const cams = devices.filter(isCamera);
@@ -29,8 +29,12 @@ export async function writeGo2rtcConfig(cfg, devices) {
     // to interpret it, then encode Opus for browser WebRTC.
     "ffmpeg:",
     '  eufy_pcm: "-fflags nobuffer -flags low_delay -f s16le -ar 16000 -ac 1 -i {input}"',
-    "streams:",
   ];
+  // ICE needs the host's published address/port, which can differ from the container listener.
+  if (cfg.webrtcCandidates?.length) {
+    lines.splice(7, 0, "  candidates:", ...cfg.webrtcCandidates.map((c) => `    - ${JSON.stringify(c)}`));
+  }
+  lines.push("streams:");
 
   for (const d of cams) {
     // Normal view stream. `#async` re-stamps eufy's discontinuous video timestamps from wall clock.

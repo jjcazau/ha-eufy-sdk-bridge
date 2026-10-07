@@ -1,5 +1,5 @@
 name: eufy-sdk bridge (Talkback Fork)
-version: "0.1.0"
+version: "0.1.1"
 slug: eufy_sdk_bridge_talkback
 description: Experimental eufy-sdk bridge fork adding incoming camera audio and on-demand WebRTC microphone talkback.
 url: "https://github.com/jjcazau/ha-eufy-sdk-bridge"
@@ -35,6 +35,7 @@ options:
   debug: false
   debug_p2p: false
   go2rtc_enable: true
+  webrtc_candidates: []
 schema:
   email: str
   password: password
@@ -48,3 +49,5 @@ schema:
   debug: bool
   debug_p2p: bool
   go2rtc_enable: bool
+  webrtc_candidates:
+    - str

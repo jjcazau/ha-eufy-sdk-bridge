@@ -380,7 +380,7 @@ Fired when a camera's live P2P feed opens (`active: true`) or is torn down / idl
 | `GET /healthz`       | `{ ok, schemaVersion, auth: { state }, streaming: [sn,…] }` — always available (even before auth) |
 | `GET /snapshot/<sn>` | a JPEG still (`image/jpeg`). _Requires auth._                                                     |
 | `GET /stream/<sn>`   | live Annex-B H.264/H.265 (`video/H264`) — go2rtc's video source. _Requires auth._                 |
-| `GET /audio/<sn>`    | live signed 16-bit LE PCM, 16 kHz mono — go2rtc's incoming-audio source. _Requires auth._          |
+| `GET /audio/<sn>`    | live signed 16-bit LE PCM, 16 kHz mono — go2rtc's incoming-audio source. _Requires auth._         |
 
 The generated go2rtc config exposes two names for a speaker-capable camera:
 

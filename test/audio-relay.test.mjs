@@ -48,12 +48,14 @@ test("audio relay chooses decoder args by eufy codec and keeps one stable PCM ou
   live.emit("audio", { codec: "aac-lc", data: Buffer.from([1, 2, 3]) });
   assert.equal(calls.length, 1);
   assert.equal(calls[0].bin, "ffmpeg");
-  assert.deepEqual(calls[0].args.slice(0, 8), [
+  assert.deepEqual(calls[0].args.slice(0, 10), [
     "-hide_banner",
     "-loglevel",
     "error",
-    "-fflags",
-    "nobuffer",
+    "-probesize",
+    "32",
+    "-analyzeduration",
+    "0",
     "-f",
     "aac",
     "-i",
@@ -74,6 +76,18 @@ test("audio relay chooses decoder args by eufy codec and keeps one stable PCM ou
   close();
   assert.equal(live.stopped, true);
   assert.equal(procs[1].killed, true);
+});
+
+test("decoder pipe failure closes the HTTP output and releases the live consumer", () => {
+  const live = fakeLive();
+  const output = new PassThrough();
+  const decoder = fakeProcess();
+  createPcmAudioRelay({ live, output, spawnProcess: () => decoder });
+  live.emit("audio", { codec: "g711a", data: Buffer.from([1]) });
+  decoder.stdin.emit("error", new Error("EPIPE"));
+  assert.equal(live.stopped, true);
+  assert.equal(output.writableEnded, true);
+  assert.equal(decoder.killed, true);
 });
 
 test("audio relay rejects an unknown SDK audio codec instead of guessing", () => {

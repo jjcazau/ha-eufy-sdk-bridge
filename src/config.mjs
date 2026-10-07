@@ -75,6 +75,10 @@ export function loadConfig(env = process.env) {
     // session / split push delivery. Set a unique value per bridge when you run more than one on an account.
     openudid: env.BRIDGE_OPENUDID || undefined,
     go2rtcConfig: env.GO2RTC_CONFIG || "./go2rtc.yaml",
+    webrtcCandidates: (env.GO2RTC_WEBRTC_CANDIDATES || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
     // Toggle for the bundled go2rtc process. Useful when running go2rtc as a separate container/service
     // instead of the one bundled here. Default ON to match existing behavior; set GO2RTC_ENABLE=0 to skip
     // spawning it.

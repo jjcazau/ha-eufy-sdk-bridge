@@ -14,10 +14,10 @@ const cams = [
   { sn: "SENSOR1" }, // no stream path → not a camera, must not appear
 ];
 
-async function generate() {
+async function generate(extra = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "go2rtc-"));
   const file = path.join(dir, "go2rtc.yaml");
-  const sns = await writeGo2rtcConfig({ go2rtcConfig: file, selfHost: "127.0.0.1", port: 3000 }, cams);
+  const sns = await writeGo2rtcConfig({ go2rtcConfig: file, selfHost: "127.0.0.1", port: 3000, ...extra }, cams);
   return { yaml: fs.readFileSync(file, "utf8"), sns };
 }
 
@@ -29,11 +29,32 @@ test("camera view stream keeps async video and adds normalized incoming audio", 
   assert.match(yaml, /eufy_pcm: ".*-f s16le -ar 16000 -ac 1 -i \{input\}"/);
 });
 
+test("WebRTC candidates advertise the mapped host media port under webrtc", async () => {
+  const { yaml } = await generate({ webrtcCandidates: ["192.0.2.1:8557", "stun:8557"] });
+  assert.match(yaml, /webrtc:\n  listen: ":8555"\n  candidates:\n    - "192.0.2.1:8557"\n    - "stun:8557"\nffmpeg:/);
+});
+
 test("speaker-capable camera gets a separate lazy two-way stream", async () => {
   const { yaml } = await generate();
   assert.match(yaml, /CAM1_2way:/);
   assert.match(yaml, /talkback-worker\.mjs CAM1#backchannel=1#audio=alaw\/8000/);
   assert.ok(!yaml.includes("VIDEO_ONLY_2way"), "no speaker evidence means no talkback stream");
+});
+
+test("muted hardware still has a backchannel when the SDK exposes talkback", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "go2rtc-"));
+  const file = path.join(dir, "go2rtc.yaml");
+  await writeGo2rtcConfig({ go2rtcConfig: file, selfHost: "127.0.0.1", port: 3000 }, [
+    {
+      sn: "MUTED",
+      stream: "/stream/MUTED",
+      state: { speaker: false, microphone: false },
+      audio: { incoming: true, talkback: true },
+    },
+  ]);
+  const yaml = fs.readFileSync(file, "utf8");
+  assert.match(yaml, /MUTED_2way:/);
+  assert.match(yaml, /audio\/MUTED/);
 });
 
 test("a camera without microphone evidence stays video-only", async () => {

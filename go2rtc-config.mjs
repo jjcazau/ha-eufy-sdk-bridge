@@ -1,9 +1,8 @@
-// Write go2rtc.yaml from the live device list, so a camera appears with nobody editing YAML.
+// Write go2rtc.yaml from the live device list, so cameras appear without hand-edited YAML.
 //
-// go2rtc (bundled in the image) is the ONLY media-protocol code in this project: it pulls the bridge's
-// one HTTP Annex-B feed per camera and turns it into RTSP / WebRTC / MSE / HLS. Each camera becomes a
-// go2rtc stream sourced from `ffmpeg:<the bridge's /stream URL>#video=copy` — copy, not transcode, so
-// go2rtc only remuxes.
+// The normal <serial> stream carries view-only video plus camera audio. A separate <serial>_2way stream
+// carries only the WebRTC microphone backchannel. Keeping them split means merely watching a doorbell
+// never opens its speaker/talkback path; Advanced Camera Card can engage the dependency only for a call.
 //
 // The file contains real serials, so it is gitignored and generated at startup.
 import { writeFile, mkdir } from "node:fs/promises";
@@ -13,6 +12,8 @@ import { dirname } from "node:path";
 // include camera/video). This matches what HA turns into a camera entity — using deviceClass here
 // would miss a camera the SDK downgrades to "other" for sitting behind a HomeBase (not direct P2P).
 const isCamera = (d) => Boolean(d.stream);
+const hasIncomingAudio = (d) => d.state?.microphone === true;
+const hasTalkback = (d) => d.state?.speaker === true;
 
 export async function writeGo2rtcConfig(cfg, devices) {
   const cams = devices.filter(isCamera);
@@ -24,17 +25,32 @@ export async function writeGo2rtcConfig(cfg, devices) {
     '  listen: ":8554"',
     "webrtc:",
     '  listen: ":8555"',
+    // /audio/<sn> is raw signed 16-bit LE, 16 kHz mono. Tell go2rtc's ffmpeg wrapper exactly how
+    // to interpret it, then encode Opus for browser WebRTC.
+    "ffmpeg:",
+    '  eufy_pcm: "-fflags nobuffer -flags low_delay -f s16le -ar 16000 -ac 1 -i {input}"',
     "streams:",
   ];
+
   for (const d of cams) {
-    // A stream id per camera serial; the source is this bridge's own HTTP feed.
-    // `#async` makes ffmpeg stamp frames from the wall clock (-use_wallclock_as_timestamps 1 -async 1)
-    // instead of trusting the camera's. The eufy feed starts at dts 0 and then jumps, which a consumer
-    // reads as a broken stream: Home Assistant aborts with "Timestamp discontinuity detected: last dts =
-    // 0, dts = 4219155056" seconds after the picture starts flowing. Re-stamping costs nothing here —
-    // the feed is remuxed, not transcoded, and a live view has no timeline to preserve.
-    lines.push(`  ${d.sn}: ffmpeg:http://${cfg.selfHost}:${cfg.port}/stream/${d.sn}#video=copy#async`);
+    // Normal view stream. `#async` re-stamps eufy's discontinuous video timestamps from wall clock.
+    lines.push(`  ${d.sn}:`);
+    lines.push(`    - ffmpeg:http://${cfg.selfHost}:${cfg.port}/stream/${d.sn}#video=copy#async`);
+    if (hasIncomingAudio(d)) {
+      lines.push(`    - ffmpeg:http://${cfg.selfHost}:${cfg.port}/audio/${d.sn}#input=eufy_pcm#audio=opus`);
+    }
+
+    // Separate audio-only call target. go2rtc writes browser microphone PCMA to this process's stdin.
+    // The worker does not log in/open talkback until stdin actually contains audio, so metadata probes
+    // are harmless and ordinary viewing never occupies the camera speaker.
+    if (hasTalkback(d)) {
+      lines.push(`  ${d.sn}_2way:`);
+      lines.push(
+        `    - exec:node /app/src/talkback-worker.mjs ${d.sn}#backchannel=1#audio=alaw/8000#killsignal=15#killtimeout=5`,
+      );
+    }
   }
+
   const yaml = lines.join("\n") + "\n";
   await mkdir(dirname(cfg.go2rtcConfig), { recursive: true }).catch(() => {});
   await writeFile(cfg.go2rtcConfig, yaml, "utf8");

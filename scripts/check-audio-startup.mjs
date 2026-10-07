@@ -12,7 +12,8 @@ import { setTimeout as delay } from "node:timers/promises";
 import { writeGo2rtcConfig } from "../go2rtc-config.mjs";
 
 const dir = await mkdtemp(join(tmpdir(), "eufy-audio-startup-"));
-let process;
+const coldStartMs = Number(process.env.COLD_START_MS) || 0;
+let go2rtc;
 let server;
 let socket;
 try {
@@ -38,14 +39,23 @@ try {
   const video = await readFile(videoPath);
   server = http
     .createServer((request, response) => {
-      response.writeHead(200, { "content-type": "application/octet-stream" });
       // Deliver one second of Annex-B video each second and raw PCM at its real-time rate.
       // Neither media source may buffer seconds of data before the Live SDP can be returned.
       const isAudio = request.url.startsWith("/audio/");
       const chunk = isAudio ? Buffer.alloc(640) : video;
-      response.write(chunk);
-      const timer = setInterval(() => response.write(chunk), isAudio ? 20 : 1000);
-      response.on("close", () => clearInterval(timer));
+      let timer;
+      const start = () => {
+        response.writeHead(200, { "content-type": "application/octet-stream" });
+        response.write(chunk);
+        timer = setInterval(() => response.write(chunk), isAudio ? 20 : 1000);
+      };
+      // A fresh SDK client may still be discovering the camera when go2rtc asks for video. Its
+      // producer must wait for that first keyframe, rather than replace video with audio-only SDP.
+      const warming = setTimeout(start, isAudio ? 0 : coldStartMs);
+      response.on("close", () => {
+        clearTimeout(warming);
+        clearInterval(timer);
+      });
     })
     .listen(0, "127.0.0.1");
   await once(server, "listening");
@@ -58,9 +68,9 @@ try {
     .replace(":8554", ":32254")
     .replace(":8555", ":32255");
   await writeFile(config, yaml);
-  process = spawn(globalThis.process.env.GO2RTC_BIN || "go2rtc", ["-config", config], { stdio: "ignore" });
+  go2rtc = spawn(process.env.GO2RTC_BIN || "go2rtc", ["-config", config], { stdio: "ignore" });
   let spawnError;
-  process.on("error", (error) => {
+  go2rtc.on("error", (error) => {
     spawnError = error;
   });
   for (let i = 0; i < 40; i++) {
@@ -77,8 +87,8 @@ try {
   const sdp = await new Promise((resolve, reject) => {
     let data = "";
     const timeout = setTimeout(
-      () => reject(new Error("Live negotiation stalled probing camera media (over 2 seconds)")),
-      2000,
+      () => reject(new Error("Live negotiation stalled after camera media became ready (over 2 seconds)")),
+      coldStartMs + 2000,
     );
     socket.on("error", reject);
     socket.on("data", (chunk) => {
@@ -92,14 +102,14 @@ try {
     });
   });
   assert.match(sdp, /RTSP\/1.0 200 OK/);
-  assert.match(sdp, /m=video/);
+  assert.match(sdp, /m=video/, "cold Live must contain video without first opening talkback");
   assert.match(sdp, /m=audio/);
   console.log(`PASS: normal Live negotiated video and camera audio in ${Date.now() - start}ms`);
 } finally {
   socket?.destroy();
-  if (process?.pid) {
-    const exited = once(process, "exit");
-    process.kill("SIGTERM");
+  if (go2rtc?.pid) {
+    const exited = once(go2rtc, "exit");
+    go2rtc.kill("SIGTERM");
     await exited;
   }
   server?.closeAllConnections();

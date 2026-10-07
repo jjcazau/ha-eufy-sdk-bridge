@@ -32,9 +32,6 @@ export async function writeGo2rtcConfig(cfg, devices) {
     // /audio/<sn> is raw signed 16-bit LE, 16 kHz mono. Tell go2rtc's ffmpeg wrapper exactly how
     // to interpret it, then encode Opus for browser WebRTC.
     "ffmpeg:",
-    // /stream/<sn> is already Annex-B H264. Do not spend seconds estimating the format/frame rate
-    // while go2rtc withholds the viewer's SDP; #async below supplies wall-clock timestamps.
-    '  eufy_h264: "-probesize 32768 -analyzeduration 1 -fflags nobuffer -flags low_delay -f h264 -i {input}"',
     // Raw PCM already has a known format. Default FFmpeg probing buffers seconds of camera audio,
     // delaying the whole Live negotiation; keep analysis bounded to its first tiny PCM packet.
     '  eufy_pcm: "-probesize 32 -analyzeduration 1 -fflags nobuffer -flags low_delay -f s16le -ar 16000 -ac 1 -i {input}"',
@@ -51,9 +48,10 @@ export async function writeGo2rtcConfig(cfg, devices) {
   lines.push("streams:");
 
   for (const d of cams) {
-    // Normal view stream. `#async` re-stamps eufy's discontinuous video timestamps from wall clock.
+    // go2rtc's native Annex-B producer identifies SPS/VPS immediately and stamps frames from wall
+    // clock itself. A cold SDK open must not race FFmpeg's fixed 30-second process launch deadline.
     lines.push(`  ${d.sn}:`);
-    lines.push(`    - ffmpeg:http://${cfg.selfHost}:${cfg.port}/stream/${d.sn}#input=eufy_h264#video=copy#async`);
+    lines.push(`    - http://${cfg.selfHost}:${cfg.port}/stream/${d.sn}`);
     if (hasIncomingAudio(d)) {
       lines.push(`    - ffmpeg:http://${cfg.selfHost}:${cfg.port}/audio/${d.sn}#input=eufy_pcm#audio=opus`);
     }

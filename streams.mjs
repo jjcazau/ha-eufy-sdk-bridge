@@ -13,7 +13,7 @@
 // which this whole file collapses to reusing the one control client.
 import { EufyMega, FileSessionStore, LoginStatus } from "@mega-yfue/eufy-sdk";
 
-const clients = new Map(); // sn -> EufyMega
+const clients = new Map(); // sn -> Promise<EufyMega> (also coalesces simultaneous audio/video opens)
 
 /**
  * Options for a stream-only client. Exported so the realtime opt-out is testable without a login.
@@ -38,17 +38,27 @@ export function streamClientOptions(cfg) {
 
 /** Get (or lazily create + hydrate) the dedicated stream client for a camera. */
 export async function streamClientFor(sn, cfg) {
-  let client = clients.get(sn);
-  if (client) return client;
-  client = new EufyMega(streamClientOptions(cfg));
-  client.on("error", (e) => console.error(`[bridge] stream(${sn}) sdk error: ${e?.message ?? e}`));
-  const result = await client.login();
-  if (result.status !== LoginStatus.Ok) {
-    clients.delete(sn);
-    throw new Error(`stream client for ${sn} could not hydrate session (${result.status})`);
+  if (clients.has(sn)) return clients.get(sn);
+  const pending = (async () => {
+    const client = new EufyMega(streamClientOptions(cfg));
+    client.on("error", (e) => console.error(`[bridge] stream(${sn}) sdk error: ${e?.message ?? e}`));
+    try {
+      const result = await client.login();
+      if (result.status !== LoginStatus.Ok)
+        throw new Error(`stream client for ${sn} could not hydrate session (${result.status})`);
+      return client;
+    } catch (e) {
+      await client.disconnect?.().catch(() => {});
+      throw e;
+    }
+  })();
+  clients.set(sn, pending);
+  try {
+    return await pending;
+  } catch (e) {
+    if (clients.get(sn) === pending) clients.delete(sn);
+    throw e;
   }
-  clients.set(sn, client);
-  return client;
 }
 
 /**
@@ -63,12 +73,12 @@ export function dropStreamClient(sn) {
   const client = clients.get(sn);
   if (!client) return false;
   clients.delete(sn);
-  void client.disconnect?.().catch(() => {}); // best-effort; the next open builds a new one regardless
+  void client.then((c) => c.disconnect?.()).catch(() => {});
   return true;
 }
 
 /** Tear down every stream client (on shutdown). */
 export async function closeStreamClients() {
-  await Promise.all([...clients.values()].map((c) => c.disconnect?.().catch(() => {})));
+  await Promise.all([...clients.values()].map((c) => c.then((v) => v.disconnect?.()).catch(() => {})));
   clients.clear();
 }

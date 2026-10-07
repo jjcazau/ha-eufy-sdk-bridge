@@ -48,12 +48,12 @@ or with Compose (`cp .env.example .env` first): `docker compose up -d`.
 
 ## Where it fits
 
-| Repo                                                                  | Role                                          |
-| --------------------------------------------------------------------- | --------------------------------------------- |
-| [`eufy-sdk`](https://github.com/mega-yfue/eufy-sdk)                   | the HA-agnostic library                       |
+| Repo                                                                  | Role                                            |
+| --------------------------------------------------------------------- | ----------------------------------------------- |
+| [`eufy-sdk`](https://github.com/mega-yfue/eufy-sdk)                   | the HA-agnostic library                         |
 | **`jjcazau/ha-eufy-sdk-bridge`**                                      | **this fork** — upstream bridge + two-way audio |
-| [`ha-eufy-sdk-addon`](https://github.com/mega-yfue/ha-eufy-sdk-addon) | Home Assistant add-on wrapper                 |
-| [`ha-eufy-sdk`](https://github.com/mega-yfue/ha-eufy-sdk)             | the HACS integration (front door)             |
+| [`ha-eufy-sdk-addon`](https://github.com/mega-yfue/ha-eufy-sdk-addon) | Home Assistant add-on wrapper                   |
+| [`ha-eufy-sdk`](https://github.com/mega-yfue/ha-eufy-sdk)             | the HACS integration (front door)               |
 
 > Fork status: upstream bridge features plus go2rtc incoming audio and lazy talkback backchannel.
 > Speaker/microphone support is discovered per device; normal viewing does not open talkback. **Optional Anker Solix** support (power stations / smart meter / Solarbank, a separate account)

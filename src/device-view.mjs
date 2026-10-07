@@ -18,6 +18,7 @@ export function createDeviceView(ctx) {
     const dev = await eufy.getDevice(sn);
     const m = dev.describe();
     const isCamera = m.capabilities.includes("camera") || m.capabilities.includes("video");
+    const cam = isCamera ? dev.camera?.() : undefined;
     return {
       sn: m.sn,
       name: m.name, // owner's device name (e.g. "Dining room"), from device_name
@@ -28,6 +29,7 @@ export function createDeviceView(ctx) {
       state: propertyState(dev), // live property values ({ battery: 74, motion: false, … })
       stream: isCamera ? `/stream/${m.sn}` : undefined,
       streaming: isCamera ? streaming.has(m.sn) : undefined, // live P2P feed active right now?
+      audio: isCamera ? { incoming: Boolean(cam?.live), talkback: Boolean(cam?.talkback) } : undefined,
       canReboot: m.codec === "station", // HomeBase-only; drives a Reboot button in HA
     };
   }

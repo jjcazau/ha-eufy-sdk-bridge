@@ -1,9 +1,9 @@
 {
   "name": "ha-eufy-sdk-bridge",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "type": "module",
-  "description": "WebSocket + HTTP bridge exposing the eufy-sdk SDK to a frontend (Home Assistant, a web UI, anything), with go2rtc for live video.",
+  "description": "Eufy SDK bridge with go2rtc live video, incoming camera audio, and on-demand WebRTC talkback.",
   "main": "server.mjs",
   "bin": {
     "eufy-sdk-bridge": "bin/start.sh"

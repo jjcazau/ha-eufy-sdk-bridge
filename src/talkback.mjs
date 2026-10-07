@@ -8,6 +8,10 @@ export function createTalkbackWorker({ input, openTalkback, spawnProcess = spawn
   let stopped = false;
   let starting;
   let closing;
+  let latest;
+  let blocked = false;
+  // PCMA / 8 kHz: retain at most the newest 20 ms, never a backlog of spoken audio.
+  const packetBytes = 160;
 
   const fail = (e) => {
     log(e?.message ?? String(e));
@@ -17,10 +21,13 @@ export function createTalkbackWorker({ input, openTalkback, spawnProcess = spawn
   async function shutdown(code = 0) {
     if (stopped) return closing;
     stopped = true;
-    input.removeListener("data", onFirstChunk);
-    input.unpipe(encoder?.stdin);
+    input.removeListener("data", onAudio);
+    latest = undefined;
     // Release the speaker immediately on hang-up; discard queued speech.
     closing = (async () => {
+      encoder?.stdin.destroy();
+      encoder?.stdout.unpipe(sink);
+      encoder?.stdout.resume();
       encoder?.kill("SIGTERM");
       try {
         await session?.talk.stop();
@@ -37,8 +44,7 @@ export function createTalkbackWorker({ input, openTalkback, spawnProcess = spawn
     return closing;
   }
 
-  async function start(firstChunk) {
-    input.pause();
+  async function start() {
     try {
       session = await openTalkback();
       // A caller can hang up while login/P2P is warming. Release the late handle too.
@@ -88,6 +94,10 @@ export function createTalkbackWorker({ input, openTalkback, spawnProcess = spawn
       );
       encoder.once("error", fail);
       encoder.stdin.on("error", fail);
+      encoder.stdin.on("drain", () => {
+        blocked = false;
+        flushLatest();
+      });
       encoder.stdout.on("error", fail);
       encoder.once("exit", (code, signal) => {
         if (!stopped) fail(new Error(`ffmpeg exited (code=${code}, signal=${signal})`));
@@ -95,17 +105,31 @@ export function createTalkbackWorker({ input, openTalkback, spawnProcess = spawn
       sink = session.talk.writable();
       sink.on("error", fail);
       encoder.stdout.pipe(sink);
-      encoder.stdin.write(firstChunk);
-      input.pipe(encoder.stdin);
+      flushLatest();
     } catch (e) {
       if (!stopped) fail(e);
     }
   }
 
-  function onFirstChunk(chunk) {
-    starting = start(chunk);
+  function flushLatest() {
+    if (stopped || blocked || !encoder || !latest) return;
+    const chunk = latest;
+    latest = undefined;
+    blocked = !encoder.stdin.write(chunk);
   }
-  input.once("data", onFirstChunk);
+
+  function onAudio(chunk) {
+    if (stopped) return;
+    if (!encoder || blocked) {
+      // Keep draining while the SDK discovers/warms the camera. Pausing here queues speech in
+      // HTTP/TCP and the encoder; the SDK then paces that old speech in real time forever behind.
+      latest = Buffer.from(chunk.subarray(Math.max(0, chunk.length - packetBytes)));
+      if (!starting) starting = start();
+    } else {
+      blocked = !encoder.stdin.write(chunk);
+    }
+  }
+  input.on("data", onAudio);
   input.once("end", () => void shutdown());
   input.once("close", () => void shutdown());
   input.once("error", fail);

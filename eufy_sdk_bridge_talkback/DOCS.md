@@ -4,7 +4,7 @@ This is a test Home Assistant add-on for the `jjcazau/ha-eufy-sdk-bridge` fork.
 
 It preserves the upstream bridge behavior and adds:
 
-- incoming camera audio through go2rtc;
+- incoming camera audio through go2rtc, with bounded media probing so a fresh Live view can start without first placing a call;
 - a separate `<serial>_2way` go2rtc stream for microphone backchannel;
 - viewing and talkback share the camera's SDK/P2P session so starting a call does not replace the live feed;
 - lazy Eufy SDK talkback, opened only when actual microphone audio is sent.

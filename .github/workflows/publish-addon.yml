@@ -52,6 +52,8 @@ jobs:
             --tag "$APP_IMAGE:$APP_VERSION" eufy_sdk_bridge_talkback
       - name: Verify proxied WebSocket signaling
         run: docker run --rm "$APP_IMAGE:$APP_VERSION" node scripts/check-go2rtc-origin.mjs
+      - name: Verify live media startup
+        run: docker run --rm "$APP_IMAGE:$APP_VERSION" node scripts/check-audio-startup.mjs
       - name: Publish app image
         run: |
           echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin

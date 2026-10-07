@@ -32,7 +32,12 @@ export async function writeGo2rtcConfig(cfg, devices) {
     // /audio/<sn> is raw signed 16-bit LE, 16 kHz mono. Tell go2rtc's ffmpeg wrapper exactly how
     // to interpret it, then encode Opus for browser WebRTC.
     "ffmpeg:",
-    '  eufy_pcm: "-fflags nobuffer -flags low_delay -f s16le -ar 16000 -ac 1 -i {input}"',
+    // /stream/<sn> is already Annex-B H264. Do not spend seconds estimating the format/frame rate
+    // while go2rtc withholds the viewer's SDP; #async below supplies wall-clock timestamps.
+    '  eufy_h264: "-probesize 32768 -analyzeduration 1 -fflags nobuffer -flags low_delay -f h264 -i {input}"',
+    // Raw PCM already has a known format. Default FFmpeg probing buffers seconds of camera audio,
+    // delaying the whole Live negotiation; keep analysis bounded to its first tiny PCM packet.
+    '  eufy_pcm: "-probesize 32 -analyzeduration 1 -fflags nobuffer -flags low_delay -f s16le -ar 16000 -ac 1 -i {input}"',
   ];
   // ICE needs the host's published address/port, which can differ from the container listener.
   if (cfg.webrtcCandidates?.length) {
@@ -48,7 +53,7 @@ export async function writeGo2rtcConfig(cfg, devices) {
   for (const d of cams) {
     // Normal view stream. `#async` re-stamps eufy's discontinuous video timestamps from wall clock.
     lines.push(`  ${d.sn}:`);
-    lines.push(`    - ffmpeg:http://${cfg.selfHost}:${cfg.port}/stream/${d.sn}#video=copy#async`);
+    lines.push(`    - ffmpeg:http://${cfg.selfHost}:${cfg.port}/stream/${d.sn}#input=eufy_h264#video=copy#async`);
     if (hasIncomingAudio(d)) {
       lines.push(`    - ffmpeg:http://${cfg.selfHost}:${cfg.port}/audio/${d.sn}#input=eufy_pcm#audio=opus`);
     }

@@ -379,16 +379,25 @@ Fired when a camera's live P2P feed opens (`active: true`) or is torn down / idl
 | -------------------- | ------------------------------------------------------------------------------------------------- |
 | `GET /healthz`       | `{ ok, schemaVersion, auth: { state }, streaming: [sn,…] }` — always available (even before auth) |
 | `GET /snapshot/<sn>` | a JPEG still (`image/jpeg`). _Requires auth._                                                     |
-| `GET /stream/<sn>`   | live Annex-B H.264/H.265 (`video/H264`) — what go2rtc pulls. _Requires auth._                     |
+| `GET /stream/<sn>`   | live Annex-B H.264/H.265 (`video/H264`) — go2rtc's video source. _Requires auth._                 |
+| `GET /audio/<sn>`    | live signed 16-bit LE PCM, 16 kHz mono — go2rtc's incoming-audio source. _Requires auth._          |
 
-go2rtc (bundled) turns `/stream/<sn>` into RTSP / WebRTC / MSE / HLS, so the frontend never speaks the
-raw video protocol.
+The generated go2rtc config exposes two names for a speaker-capable camera:
+
+- `<sn>` — view-only video + incoming camera audio. Opening this stream never starts talkback.
+- `<sn>_2way` — audio-only WebRTC backchannel. go2rtc writes PCMA microphone audio to a worker that
+  converts it to AAC-LC 16 kHz mono / 32 kbps and feeds the SDK's `cam.talkback()`.
+
+The talkback worker deliberately waits for the first microphone byte before hydrating the shared Eufy
+session or opening `cam.talkback()`. Metadata/capability probes therefore do not occupy the speaker path.
+It uses `autoRealtime: false`, matching the bridge's stream clients, so it does not create another push
+registration or steal realtime events from the control client.
 
 ---
 
 ## Not yet exposed
 
-- Capability **action** verbs beyond the surfaces `device.action` routes today (PTZ move, talkback).
+- Capability **action** verbs beyond the surfaces `device.action` routes today (for example PTZ move).
 - Guard / station security mode (arm home/away/disarm).
 - Per-device event subscription/filtering (events broadcast to all clients).
-- Audio / recording / timelapse.
+- Recording / timelapse.

@@ -1,19 +1,29 @@
 # ha-eufy-sdk-bridge
 
-[![CI](https://github.com/mega-yfue/ha-eufy-sdk-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/mega-yfue/ha-eufy-sdk-bridge/actions/workflows/ci.yml)
+[![CI](https://github.com/jjcazau/ha-eufy-sdk-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/jjcazau/ha-eufy-sdk-bridge/actions/workflows/ci.yml)
 [![node](https://img.shields.io/badge/node-%E2%89%A524-brightgreen?logo=nodedotjs&logoColor=white)](./package.json)
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue)](./LICENSE)
+
+> **Fork with two-way audio:** this fork extends the upstream `mega-yfue/ha-eufy-sdk-bridge` with
+> incoming camera audio and an on-demand go2rtc WebRTC talkback backchannel. The normal camera stream
+> remains view-only; a separate `<serial>_2way` stream opens Eufy talkback only when microphone audio
+> is actually sent. This is intended for Home Assistant doorbell/camera call UIs such as Advanced
+> Camera Card while keeping the upstream HACS integration compatible.
 
 The host-facing daemon: one process that logs into eufy **once** and exposes the
 [`eufy-sdk`](https://github.com/mega-yfue/eufy-sdk) to a frontend — Home Assistant, a web UI,
 anything. Ships as a multi-arch Docker image with [go2rtc](https://github.com/AlexxIT/go2rtc)
-bundled, so live camera video is available as RTSP / WebRTC / MSE / HLS with nothing else to install.
+bundled, so live camera video and camera audio are available through go2rtc, with an optional WebRTC microphone backchannel for speaker-capable cameras.
 
 ```
-WS    :3000/ws             control, state, events     ← the frontend talks to this
-HTTP  :3000/stream/<sn>    live video (Annex-B)       ← go2rtc pulls this
+WS    :3000/ws             control, state, events            ← the frontend talks to this
+HTTP  :3000/stream/<sn>    live video (Annex-B)              ← go2rtc pulls this
+HTTP  :3000/audio/<sn>     live camera audio (PCM s16le)     ← go2rtc pulls this
 HTTP  :3000/snapshot/<sn>  a JPEG still
 HTTP  :3000/healthz        which cameras are streaming
+
+go2rtc stream <sn>         normal video + incoming audio
+go2rtc stream <sn>_2way    microphone backchannel → Eufy speaker
 ```
 
 Video is deliberately **not** on the WebSocket: the WS hands back a URL, and _connecting to that URL
@@ -28,7 +38,7 @@ Pull the published image and run it (bundles the SDK + go2rtc):
 docker run -d --name eufy-bridge --network host \
   -e EUFY_EMAIL='you@example.com' -e EUFY_PASSWORD='…' -e EUFY_COUNTRY='GB' \
   -v /opt/eufy-bridge-data:/app/data \
-  ghcr.io/mega-yfue/ha-eufy-sdk-bridge:latest
+  ghcr.io/jjcazau/ha-eufy-sdk-bridge:latest
 ```
 
 or with Compose (`cp .env.example .env` first): `docker compose up -d`.
@@ -41,14 +51,14 @@ or with Compose (`cp .env.example .env` first): `docker compose up -d`.
 | Repo                                                                  | Role                                          |
 | --------------------------------------------------------------------- | --------------------------------------------- |
 | [`eufy-sdk`](https://github.com/mega-yfue/eufy-sdk)                   | the HA-agnostic library                       |
-| **`ha-eufy-sdk-bridge`**                                              | **this** — WS + HTTP + go2rtc daemon (Docker) |
+| **`jjcazau/ha-eufy-sdk-bridge`**                                      | **this fork** — upstream bridge + two-way audio |
 | [`ha-eufy-sdk-addon`](https://github.com/mega-yfue/ha-eufy-sdk-addon) | Home Assistant add-on wrapper                 |
 | [`ha-eufy-sdk`](https://github.com/mega-yfue/ha-eufy-sdk)             | the HACS integration (front door)             |
 
-> Status: working — WS control + auth-over-WS (2FA/captcha), device listing, snapshots, and go2rtc
-> streaming. **Optional Anker Solix** support (power stations / smart meter / Solarbank, a separate account)
+> Fork status: upstream bridge features plus go2rtc incoming audio and lazy talkback backchannel.
+> Speaker/microphone support is discovered per device; normal viewing does not open talkback. **Optional Anker Solix** support (power stations / smart meter / Solarbank, a separate account)
 > via `SOLIX_EMAIL` / `SOLIX_PASSWORD` — see [docs/ws-protocol.md](./docs/ws-protocol.md) (`solix.*`).
-> Published image: `ghcr.io/mega-yfue/ha-eufy-sdk-bridge` (multi-arch: `amd64` · `arm64`).
+> Published image: `ghcr.io/jjcazau/ha-eufy-sdk-bridge` (multi-arch: `amd64` · `arm64`).
 > **Publishing a GitHub Release** builds and pushes the versioned + `:latest` tags
 > automatically ([`.github/workflows/publish-ghcr.yml`](./.github/workflows/publish-ghcr.yml)); the same
 > build runs locally via [`scripts/publish-multiarch.sh`](./scripts/publish-multiarch.sh). A merge to the

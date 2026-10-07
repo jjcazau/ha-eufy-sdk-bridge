@@ -4,11 +4,11 @@ FROM ${BUILD_FROM}
 RUN apk add --no-cache ffmpeg curl jq git
 
 ARG GO2RTC_VERSION=1.9.9
-ARG TARGETARCH
-RUN case "${TARGETARCH:-amd64}" in \
+ARG BUILD_ARCH
+RUN case "${BUILD_ARCH:-amd64}" in \
       amd64) g2="go2rtc_linux_amd64" ;; \
       arm64) g2="go2rtc_linux_arm64" ;; \
-      *) echo "unsupported TARGETARCH: ${TARGETARCH}" && exit 1 ;; \
+      *) echo "unsupported BUILD_ARCH: ${BUILD_ARCH}" && exit 1 ;; \
     esac \
  && curl -fsSL -o /usr/local/bin/go2rtc \
       "https://github.com/AlexxIT/go2rtc/releases/download/v${GO2RTC_VERSION}/${g2}" \

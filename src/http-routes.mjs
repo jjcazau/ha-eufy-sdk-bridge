@@ -7,6 +7,7 @@ import path from "node:path";
 import { streamClientFor, dropStreamClient } from "../streams.mjs";
 import { createLiveStillTap } from "./live-still.mjs";
 import { createPcmAudioRelay } from "./audio-relay.mjs";
+import { createTalkbackWorker } from "./talkback.mjs";
 
 function json(res, code, body) {
   const s = JSON.stringify(body);
@@ -94,6 +95,42 @@ export function createHttpHandler(ctx) {
       });
     }
     if (!flags.ready) return json(res, 503, { error: "not authenticated", auth: ctx.authStatus() });
+
+    if (kind === "talkback" && sn) {
+      // Only go2rtc's local worker can push microphone audio. Keep the shared P2P session in this
+      // process: a second SDK client starts another live pull and interrupts the camera's viewer.
+      if (req.method !== "POST") return json(res, 405, { error: "POST required" });
+      if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.socket?.remoteAddress))
+        return json(res, 403, { error: "local microphone worker only" });
+      const worker = createTalkbackWorker({
+        input: req,
+        spawnProcess: ctx.spawnTalkbackEncoder,
+        log: (message) => ctx.eventLog?.(`/talkback ${sn} — ${message}`),
+        openTalkback: async () => {
+          const client = await openStreamClient(sn, cfg);
+          const cam = (await client.getDevice(sn)).camera?.();
+          if (!cam?.talkback) throw new Error("no talkback on this device");
+          const talk = await cam.talkback();
+          ctx.eventLog?.(`/talkback ${sn} opened on shared camera client (viewer=${streaming.has(sn)})`);
+          if (!res.destroyed) {
+            res.writeHead(200, { "content-type": "text/plain" });
+            res.flushHeaders();
+          }
+          // talk.stop() releases only its SDK media consumer. The client belongs to the shared
+          // camera pool, so disconnecting it here would also stop video and incoming audio.
+          return { talk, disconnect: async () => {} };
+        },
+        onExit: (code) => {
+          ctx.eventLog?.(`/talkback ${sn} closed (code=${code})`);
+          if (!res.destroyed) {
+            if (!res.headersSent) res.writeHead(code ? 502 : 200);
+            res.end(code ? "talkback failed" : "");
+          }
+        },
+      });
+      res.once("close", () => void worker.shutdown());
+      return;
+    }
 
     // A current still: a fresh live burst, falling back to the retained push thumbnail, and finally to
     // the copy /event-image persisted on disk. That last step matters on accounts whose pushes carry no
